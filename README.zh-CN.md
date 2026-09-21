@@ -1,102 +1,163 @@
 # tally
 
-**逐条判断评论，用代码统计比例，每个结论都能回到原文。**
+**用 Jev 分析社交媒体评论。每个百分比都能回到原文，一次请求出结果。**
 
 [English](README.md)
 
-## 界面与技术栈
+指着一个评论区，选几个标签（`喜欢 / 中立 / 讨厌 / 无关`），它会把同一个问题逐条问给 Jev，
+然后由**代码**数出答案。你得到的是一个百分比、它背后的分母、按人去重的人数，以及产生这个
+百分比的那一串逐条判定。
 
-前端采用 React、TypeScript、Vite、Tailwind CSS v4、正式 shadcn/ui / Radix 组件、Lucide 图标与 i18next。
-左侧集中配置来源与问题，右侧展示分布、评论明细、来源原文和会话历史。
-语言切换与 token 配置统一放在设置弹窗。
+```
+30 条评论 · 一次请求 · 1.1 秒 · $0.00022
 
-保留 Python 引擎、命令行和自定义来源插件；不是给旧 HTML 套一个 React 外壳。
-支持五种预设、自定义四种问法、整页/逐条、按评论/作者统计、分类筛选、文本/作者搜索、排序及展开全文。
+喜欢  46.7%  14
+中立  30.0%   9
+讨厌  16.7%   5
+无关   6.7%   2
+```
 
-## 从源码启动
+---
 
-构建需要 Python 3.11+、Node.js 22.12+ 和 npm：
+## 为什么是 Jev，而不是普通大模型
+
+普通大模型当然能做这件事。区别在于这件事要花多少次往返。
+
+判断 N 条评论，用 chat 模型通常只有两条路：**每条调一次**（N 次请求，耗时随评论数线性增长），
+或者把 N 条塞进一次生成里让它输出结构化答案（一次请求，但解析、重试、以及 N 变大后输出格式
+漂移全都要你自己扛）。这两条路都不会顺便给你每条评论一个可用的概率。
+
+Jev 是另一种形状：**许多彼此独立的小问题，在一次请求里一起回答。** 评论作为一份共享状态进去，
+每条评论各自拥有一个指向自己的问题，一次响应回来的是每条评论对应的选项概率。
+
+| | chat 模型，每条调一次 | Jev |
+|---|---|---|
+| 30 条评论需要几次往返 | 30 | **1** |
+| 实测耗时（30 条） | — | **1.1 秒** |
+| 拿到的输出 | 自由文本 / 你提示出来的 JSON | 类型化：`choice`、`noul`、`score` |
+| 每条评论的概率 | 不返回 | 返回 |
+| 输出 token 计费 | 计费 | 免费（只算输入） |
+
+这就是这个工具存在的理由。判断一千条评论不是一千倍的工作量，只是同一个请求里更大的状态。
+费用只算输入 token，大约 **每 1 万条评论 $0.02–0.03**。
+
+实测数据：一个 33 条回复的 V2EX 帖，输入 5,198 tokens，$0.000218，1.13 秒。
+想对比的话，把同样这 30 条丢给你常用的 chat 模型跑一遍，结论由你自己得出。
+
+---
+
+## 快速开始
 
 ```bash
+git clone https://github.com/adlternative/tally.git
+cd tally/frontend && npm ci && npm run build && cd ..
+python3 tally.py --serve          # → http://127.0.0.1:8020
+```
+
+需要 Python 3.11+；Node 22.12+ **只在构建界面时需要**，构建好的版本用 Python 就能跑。
+首次打开会弹出设置：填入 [TypeSafe API key](https://console.typesafe.ai/)，验证通过后以
+`0600` 权限存到 `~/.jev-tally/token`。
+
+命令行不需要构建：
+
+```bash
+python3 tally.py --source v2ex --ident https://www.v2ex.com/t/1243550 --limit 30 \
+                 --kind choice --options '喜欢,中立,讨厌,无关' '这条评论是什么态度？'
+
+python3 tally.py https://example.com '这一页讲了什么'
+```
+
+---
+
+## 数据源
+
+一个数据源 = **一条打印 JSON 的命令 + 指出哪个字段是正文的路径**，仅此而已。所以九个站点能塞进
+一个文件，你自己的爬虫也同样能接进来。
+
+```json
+"v2ex": {
+  "label": "V2EX 帖子回复",
+  "ident": "话题 id（t/ 后面的数字）",
+  "run":   "opencli v2ex replies {ident} --limit {limit} -f json",
+  "text": "content", "author": "author"
+}
+```
+
+内置：B站、微博、小红书、知乎回答评论、YouTube、V2EX、Hacker News，另有一个完全不用爬虫框架、
+只用 `curl` 的示例插件。
+
+多数内置源是 [OpenCLI](https://github.com/jackwener/opencli) 的一行命令（公开 npm 包，需自行安装）。
+V2EX 和 Hacker News 不需要登录；另外几个需要浏览器已登录对应站点，部分 adapter 可能还要额外安装。
+命令以 **argv 执行，绝不经过 shell**，所以标识里带 `; rm -rf /` 也只是一个文件名。
+
+自己的源放进 `sources.d/`，只要能打印 JSON：
+
+```json
+{
+  "my-crawler": {
+    "label": "我的来源",
+    "ident": "帖子 ID",
+    "run": "python3 /absolute/path/to/source.py {ident} --limit {limit}",
+    "items": "data.comments",
+    "text": "content", "author": "user.name"
+  }
+}
+```
+
+两个可选字段很顶用：`ident_from`（用正则从粘贴的链接里取出 ID，链接和 ID 都能用）、
+`skip`（在进入分母之前丢掉不是观点的行 —— 帖子本体、楼中楼、「[+N more replies]」占位行）。
+
+---
+
+## 你会得到什么
+
+- **分母。** `46.7%` 意味着 30 条里数出来 14 条。抓了多少条、真正判断了多少条，都看得见。
+- **逐条明细。** 每条评论的判定与把握度，可按最不确定排序 —— 在引用这个百分比之前，先读分歧。
+- **不花钱的筛选。** 点分类、搜正文或作者、改排序：这是重绘已经付过费的判断，不会重新请求。
+- **评论数 ≠ 人数。** 一个作者发五条只算一个观点，两种口径都会给出。
+- **缓存。** 抓取按「来源 + 标识 + 条数」缓存；问第二个问题直接复用，只有点「重新获取」才会再抓。
+
+---
+
+## 这些数字的边界
+
+- **判断不是事实。** Jev 给的是每条评论的概率。连跑两次会有评论翻转 —— 逐条明细就是为这个存在的。
+- **样本不是全体。** B站/微博默认返回按热度排序的一页。`30 条里的 46.7%` 不等于
+  「那个视频下所有评论者的 46.7%」。
+- **`无关` 必须单独一档。** 只给「喜欢/反对」时，所有没提主题的评论都会被算成反对，得到的是一个
+  看起来精确、实则错误的比值。
+- **超大线程。** 当前版本不会把超限任务自动拆成多次请求；状态超出上下文预算时请下调条数。
+
+---
+
+## 开发
+
+```bash
+python3 test_tally.py     # 引擎：抽取、检索、统计、token 处理、静态文件
+python3 test_sources.py   # 数据源层：argv 组装、缓存、ID 规则、插件加载
+python3 test_e2e.py       # 23 个场景，打真实服务（上游与数据源为本地 fixture）
 cd frontend
-npm ci
-npm run build
-cd ..
-python3 tally.py --serve
+npm run dev               # Vite 开发服务，API 代理到 127.0.0.1:8020
+npm test                  # 32 个 Playwright 场景，操作真实界面
+npm run build             # 类型检查 + 生产构建
 ```
 
-打开 http://127.0.0.1:8020 。Python 提供 `frontend/dist/` 中的构建页面和静态资源。
-运行已经构建好的版本不需要 Node；CLI 也不依赖前端构建。
+测试不调用任何收费模型、也不碰真实平台：假上游与固定数据源让百分比可断言、跑一次不花钱，
+并且隔离了 `HOME`，开发者自己的 token 不可能被发出去。也正因为如此，测试全绿只证明这条流水线
+是通的，不代表某个外部 adapter 一定可用。
 
-开发时保持 Python 服务运行，在另一个终端执行：
-
-```bash
-cd frontend
-npm run dev
+```
+tally.py                     引擎 + CLI + 静态/API 服务（仅标准库）
+sources.py, sources.json     数据源协议与内置源
+sources.d/                   你自己的源
+frontend/src/                React 工作台（Vite、Tailwind、shadcn/ui、i18next）
+frontend/tests/              Playwright 场景与隔离的 fixture 后端
+scripts/package_release.py   打一个本地、无需 Node 的运行包
 ```
 
-Vite 会将 API 请求代理到 8020。依赖使用公共 npm registry，并提供锁文件。
-
-## 本地发布包
-
-构建完成后执行：
-
-```bash
-python3 scripts/package_release.py
-```
-
-生成 `artifacts/tally-runtime.zip`。解压后运行 `python3 tally/tally.py --serve` 即可。
-包内只含运行需要的 Python、构建前端、内置来源、示例插件及文档/许可，不含凭据、缓存、node_modules、私有插件或测试产物。
-此命令仅在本地打包，不提交、不上传、不发布。
-
-## Token 与隐私
-
-在设置中填写你自己的 [TypeSafe API key](https://console.typesafe.ai/)。
-使用免费 models 接口验证，成功后以 0600 权限保存到 `~/.jev-tally/token`，不回显已有 token、不写入 localStorage。
-优先级：`TYPESAFE_API_KEY` → `JEV_TOKEN` → `~/.jev-tally/token` → 兼容的 `~/jev_token`。
-环境变量优先于设置中写入的文件。
-
-这是可信本机工具，不是多租户服务。点击分析会把问题与来源内容发送给 TypeSafe。
-插件会执行本地命令，只安装可信插件；部分来源借助已登录浏览器。不要直接公开暴露服务。
-
-## 来源与统计边界
-
-内置 B站、微博、小红书、知乎回答评论、YouTube、V2EX、Hacker News，不含雪球。
-大部分来源依赖另行安装的 OpenCLI 命令；B站的 `comments-all` 可能需要单独安装适配器。
-插件不限 OpenCLI：任何输出 JSON 的命令都可以。协议和有效 JSON 示例见英文 README。
-
-- 粘贴链接可自动提取部分来源的 ID；知乎需回答链接，小红书需包含签名的完整链接。
-- 来源抓取有本地缓存；再次提问复用缓存，点击“重新获取”才强制更新。
-- 判断结果不缓存，真实模型重复运行可能得到不同判断；整页 URL 问答会重新获取网页。
-- 筛选、排序、搜索和语言切换不重新调用模型。
-- 按作者统计时，同一作者计一次：是/否取平均，分类取该作者最常见判定；平票不代表明确倾向。
-- 缺失作者信息时不提供按人统计。百分比仅描述抓到的样本，不能代表整个平台。
-- 当前不自动拆分多个模型请求，大数据集可能超出上游上下文限制，请选择合适的条数。
-
-切换语言时，未手改的预设问题和选项随界面翻译；手改问题、原文和已有结果保留原语言。
-后端及适配器的具体错误保留其原语言。
-
-## 测试
-
-先构建前端，然后执行：
-
-```bash
-python3 test_tally.py
-python3 test_sources.py
-python3 test_e2e.py
-cd frontend
-npx playwright install chromium
-npm test
-npm run format:check
-```
-
-Playwright 使用真 Chromium 操作构建后的 React 页面，连接真实 Python 服务；上游 Jev 与数据源由本地确定性 fixture 替代。
-测试 HOME、token、插件与缓存隔离，不调用收费模型。安装依赖/浏览器需联网，测试运行不依赖真实平台。
-涵盖设置焦点、中英文、token 保存/失败、预设、自定义问法、历史、筛选排序、连续抓取、少量评论、加载/错误、原文转义和窄屏。
-
-旧 `ui.html` 与假 DOM 测试已经移除。失败截图/trace 位于 `frontend/test-results/`。
-通过本地 fixture 不等于所有真实站点适配器在线可用。
+环境变量：`JEV_TALLY_API_BASE`（指向另一个 Jev 兼容端点 —— 你的 key 会发给它）、
+`JEV_TALLY_SOURCES_D`、`JEV_TALLY_CACHE_DIR`、`JEV_TALLY_TOKEN_FILE`。
 
 ## 许可证
 
-tally 使用 MIT。第三方组件和依赖保留各自许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+MIT，第三方组件许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
