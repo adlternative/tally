@@ -57,8 +57,8 @@ cd tally/frontend && npm ci && npm run build && cd ..
 python3 tally.py --serve          # → http://127.0.0.1:8020
 ```
 
-Requires Python 3.11+ and, **only to build the UI**, Node 22.12+. A built checkout runs on Python
-alone. First run opens Settings: paste a [TypeSafe API key](https://console.typesafe.ai/), which is
+Requires Python 3.11+. Building the UI additionally needs Node — Vite 6 accepts 18, 20 or 22+; this
+repo was built and tested on 22.3. A built checkout runs on Python alone. First run opens Settings: paste a [TypeSafe API key](https://console.typesafe.ai/), which is
 verified against the API and stored at `~/.jev-tally/token` with mode `0600`.
 
 Command line, no build needed:
