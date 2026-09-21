@@ -1,0 +1,140 @@
+{
+  "bilibili": {
+    "label": "B站视频评论",
+    "ident": "视频 BV 号，如 BV1WtAGzYEBm",
+    "run": "opencli bilibili comments-all {ident} --max {limit} -f json",
+    "items": "",
+    "text": "text",
+    "author": "author",
+    "weight": "likes",
+    "id": "rpid",
+    "min_chars": 2,
+    "note": "需要 Chrome 已登录 B站 + OpenCLI 扩展。comments-all 会翻页拿全量。",
+    "subject": {
+      "run": "curl -sS -A \"Mozilla/5.0\" --max-time 20 \"https://api.bilibili.com/x/web-interface/view?bvid={ident}\"",
+      "at": "data.title"
+    },
+    "ident_from": "(BV[0-9A-Za-z]{10})",
+    "label_en": "Bilibili video comments",
+    "ident_en": "Video id (the BV…) — a full video link works too",
+    "note_en": "comments-all pages through the whole thread so the percentages are not dominated by the hottest comments."
+  },
+  "weibo": {
+    "label": "微博评论",
+    "ident": "微博正文 id（idstr 数字）",
+    "run": "opencli weibo comments {ident} --limit {limit} -f json",
+    "text": "text",
+    "author": "author",
+    "weight": "likes",
+    "id": "rank",
+    "note": "需要登录。官方接口一页上限 50 条。",
+    "subject": {
+      "run": "opencli weibo post {ident} -f json",
+      "at": "title"
+    },
+    "ident_from": "(?:detail/|status/|/)(\\d{6,})",
+    "label_en": "Weibo comments",
+    "ident_en": "Post URL or post id",
+    "note_en": "Needs a logged-in browser (opencli uses your cookies)."
+  },
+  "xiaohongshu": {
+    "label": "小红书笔记评论",
+    "ident": "完整笔记 URL（必须带 xsec_token，从浏览器地址栏复制）",
+    "run": "opencli xiaohongshu comments {ident} --limit {limit} --with-replies -f json",
+    "text": "text",
+    "author": "author",
+    "weight": "likes",
+    "id": "rank",
+    "note": "需要登录；带 xsec_token 的 URL 才有效，过期的会失败。",
+    "subject": {
+      "run": "opencli xiaohongshu note {ident} -f json",
+      "at": "title"
+    },
+    "label_en": "Xiaohongshu note comments",
+    "ident_en": "Full note URL (must carry xsec_token — copy it from the address bar)",
+    "note_en": "The xsec_token part is what makes the note readable; an id alone cannot be opened."
+  },
+  "zhihu": {
+    "label": "知乎回答评论",
+    "ident": "回答 URL 或 answer id",
+    "run": "opencli zhihu answer-comments {ident} --limit {limit} -f json",
+    "items": "",
+    "text": "content",
+    "author": "author",
+    "weight": "likes",
+    "id": "id",
+    "note": "评论挂在「回答」下面：打开某条回答，复制它的链接（…/answer/123456789）或直接填那串数字。问题页没有问题评论。",
+    "subject": {
+      "run": "opencli zhihu answer-detail {ident} -f json",
+      "at": "question_title"
+    },
+    "ident_from": "answer/(\\d+)",
+    "label_en": "Zhihu answer comments",
+    "ident_en": "Answer URL or answer id",
+    "note_en": "Comments hang off an ANSWER: open one, copy its link (…/answer/123456789) or just type those digits. A question page has no comments."
+  },
+  "youtube": {
+    "label": "YouTube 视频评论",
+    "ident": "视频 URL 或 video id",
+    "run": "opencli youtube comments {ident} --limit {limit} -f json",
+    "text": "text",
+    "author": "author",
+    "weight": "likes",
+    "id": "rank",
+    "note": "需要登录；一次最多 100 条。",
+    "subject": {
+      "run": "opencli youtube video {ident} -f json",
+      "at": "title"
+    },
+    "ident_from": "(?:v=|youtu\\.be/|shorts/)([\\w-]{11})",
+    "label_en": "YouTube video comments",
+    "ident_en": "Video URL or 11-character video id",
+    "note_en": "Needs a login; at most 100 per pull."
+  },
+  "v2ex": {
+    "label": "V2EX 帖子回复",
+    "ident": "话题 id（t/ 后面的数字）",
+    "run": "opencli v2ex replies {ident} --limit {limit} -f json",
+    "text": "content",
+    "author": "author",
+    "weight": null,
+    "id": "floor",
+    "min_chars": 2,
+    "note": "PUBLIC：不需要浏览器、不需要登录，拿来试流程最方便。",
+    "subject": {
+      "run": "opencli v2ex topic {ident} -f json",
+      "at": "title"
+    },
+    "ident_from": "t/(\\d+)",
+    "label_en": "V2EX topic replies",
+    "ident_en": "Topic id (the number after t/)",
+    "note_en": "PUBLIC: no browser, no login — handy to try the flow."
+  },
+  "hackernews": {
+    "label": "Hacker News 讨论",
+    "ident": "帖子 id（item?id=49750694 里的数字）",
+    "run": "opencli hackernews read {ident} --limit {limit} --depth 1 -f json",
+    "items": "",
+    "text": "text",
+    "author": "author",
+    "weight": "score",
+    "skip": {
+      "type": [
+        "POST",
+        "L1",
+        ""
+      ],
+      "author": ""
+    },
+    "min_chars": 2,
+    "subject": {
+      "run": "curl -sS -A \"Mozilla/5.0\" --max-time 20 \"https://hacker-news.firebaseio.com/v0/item/{ident}.json\"",
+      "at": "title"
+    },
+    "note": "PUBLIC：不用登录、不用浏览器。默认只统计顶层评论（L0）—— 帖子本体、楼中楼回复、以及「[+N more replies]」这类没有作者的占位行都不计数。想连楼中楼一起统计，把 run 里的 --depth 改成 2 并删掉 skip 里的 L1。",
+    "ident_from": "id=(\\d+)",
+    "label_en": "Hacker News discussion",
+    "ident_en": "Story id (the number in item?id=…)",
+    "note_en": "PUBLIC: no browser, no login. Counts top-level comments (L0) only — the story itself, nested replies and the \"[+N more replies]\" placeholders are left out. Set --depth 2 and drop L1 from skip to include nested replies."
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "example-json-api": {
+    "label": "示例插件：任何返回 JSON 的接口 / 脚本",
+    "ident": "完整 URL（会替换 {ident}）",
+    "run": "curl -sS {ident}",
+    "items": "",
+    "text": "body",
+    "author": "email",
+    "weight": null,
+    "id": "id",
+    "min_chars": 4,
+    "note": "这个源和 OpenCLI 无关 —— run 只要能打印 JSON 就行。换成你自己的爬虫：run 改成 python3 ~/myscraper.py {ident} 即可。把它存成 sources.d/<你的名字>.json 就生效，不用改代码。",
+    "label_en": "Example plugin: any endpoint or script that returns JSON",
+    "ident_en": "Whatever your command needs (a path, an id, a url)",
+    "note_en": "A data source is just a command that prints JSON, plus the field paths — curl, a Python script, jq, whatever you already run."
+  }
+}
