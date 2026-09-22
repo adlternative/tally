@@ -54,7 +54,7 @@ cd tally/frontend && npm ci && npm run build && cd ..
 python3 tally.py --serve          # → http://127.0.0.1:8020
 ```
 
-需要 Python 3.11+；**只在构建界面时**额外需要 Node —— Vite 6 接受 18、20 或 22+，本仓库在 22.3 上
+需要 Python 3.11+；**只在构建界面时**额外需要 Node —— Vite 6 接受 18、20 或 22+，本仓库在 22.22 上
 构建并测试。构建好的版本用 Python 就能跑。
 首次打开会弹出设置：填入 [TypeSafe API key](https://console.typesafe.ai/)，验证通过后以
 `0600` 权限存到 `~/.jev-tally/token`。
